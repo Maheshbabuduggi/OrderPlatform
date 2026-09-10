@@ -10,4 +10,7 @@ public class Order
     public string Status { get; set; } = "Pending"; // Pending -> Processed (set by Azure Function)
     public DateTime CreatedAt { get; set; }
     public DateTime? ProcessedAt { get; set; }
+    public string? CustomerEmail { get; set; }      // NEW
+
+    public string OrderPriority { get; set; } = "Normal"; // NEW
 }
