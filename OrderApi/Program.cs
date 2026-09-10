@@ -66,6 +66,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseDefaultFiles();   // <-- add this line: makes "/" serve wwwroot/index.html
+app.UseStaticFiles(); 
 app.UseAuthorization();
 app.MapControllers();
 
