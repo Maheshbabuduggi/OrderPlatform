@@ -5,7 +5,7 @@ using Azure.Messaging.EventHubs.Producer;
 
 namespace OrderApi.Messaging;
 
-public class EventHubPublisher : IEventPublisher, IAsyncDisposable
+public class EventHubPublisher : IEventPublisher
 {
     private readonly EventHubProducerClient _producerClient;
     private readonly ILogger<EventHubPublisher> _logger;
@@ -32,10 +32,5 @@ public class EventHubPublisher : IEventPublisher, IAsyncDisposable
         await _producerClient.SendAsync(eventBatch, cancellationToken);
 
         _logger.LogInformation("Published OrderCreated event for OrderId {OrderId}", orderEvent.OrderId);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await _producerClient.DisposeAsync();
     }
 }
