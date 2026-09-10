@@ -1,11 +1,11 @@
-using Azure.Identity;
+extern alias azid;
+using AzureIdentity = azid::Azure.Identity;
 using Azure.Messaging.EventHubs.Producer;
 using Microsoft.EntityFrameworkCore;
 using OrderApi.Configuration;
 using OrderApi.Data;
 using OrderApi.Messaging;
 using OrderApi.Services;
-using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,7 +16,8 @@ var azureOptions = builder.Configuration.GetSection(AzureOptions.SectionName).Ge
 
 // ---- 2. Add Azure Key Vault as a configuration provider ----
 // DefaultAzureCredential resolves to: environment vars -> Managed Identity (in Azure) -> Azure CLI login (local dev).
-var credential = new DefaultAzureCredential();
+//var credential = new Azure.Identity.DefaultAzureCredential();
+var credential = new AzureIdentity.DefaultAzureCredential();
 
 builder.Configuration.AddAzureKeyVault(
     new Uri(azureOptions.KeyVaultUri),

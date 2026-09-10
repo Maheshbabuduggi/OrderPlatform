@@ -1,31 +1,34 @@
-using Azure.Monitor.OpenTelemetry.Exporter;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Builder;
-using Microsoft.Azure.Functions.Worker.OpenTelemetry;
+extern alias azid1;
+using AzureIdentity = azid1::Azure.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
-using OpenTelemetry;
+using OrderProcessor.Data;
 
+var host = new HostBuilder()
+    .ConfigureFunctionsWebApplication()
+    .ConfigureAppConfiguration((context, config) =>
+    {
+        var keyVaultUri = Environment.GetEnvironmentVariable("KeyVaultUri");
+        if (!string.IsNullOrWhiteSpace(keyVaultUri))
+        {
+            config.AddAzureKeyVault(new Uri(keyVaultUri), new AzureIdentity.DefaultAzureCredential());
+        }
+    })
+    .ConfigureServices((context, services) =>
+    {
+        var configuration = context.Configuration;
 
-var builder = FunctionsApplication.CreateBuilder(args);
+        var sqlConnectionString = configuration["SqlConnectionString"]
+            ?? throw new InvalidOperationException("SqlConnectionString not found in configuration/Key Vault.");
 
-// bind the "Azure" section (change section name to match your config)
-builder.Services.Configure<AzureOptions>(builder.Configuration.GetSection("Azure"));
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlServer(sqlConnectionString, sql => sql.EnableRetryOnFailure(3)));
 
-builder.ConfigureFunctionsWebApplication();
+        services.AddApplicationInsightsTelemetryWorkerService();
+       // services.ConfigureFunctionsApplicationInsights();
+    })
+    .Build();
 
-if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")))
-{
-    builder.Services.AddOpenTelemetry()
-        .UseFunctionsWorkerDefaults()
-        .UseAzureMonitorExporter();
-}
-
-builder.Build().Run();
-
-public class AzureOptions
-{
-    public string? ApplicationInsightsConnectionString { get; set; }
-    // add other properties you need
-}
+host.Run();
