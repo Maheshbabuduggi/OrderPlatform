@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Clone') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/Maheshbabuduggi/OrderPlatform.git'
+            }
+        }
+
+        stage('SonarQube Build') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    dir('OrderApi') {
+                        sh '''
+                        export PATH=$PATH:/var/lib/jenkins/.dotnet/tools
+
+                        dotnet-sonarscanner begin \
+                          /k:"OrderPlatform" \
+                          /d:sonar.token=$SONAR_AUTH_TOKEN
+
+                        dotnet restore
+                        dotnet build -c Release
+
+                        dotnet-sonarscanner end \
+                          /d:sonar.token=$SONAR_AUTH_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build & Tag Docker Image') {
+            steps {
+                dir('OrderApi') {
+                    withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+                        sh 'docker build -t maheshsanju/orderapi:v1.0 .'
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+                    sh 'docker push maheshsanju/orderapi:v1.0'
+                }
+            }
+        }
+
+       
+        stage('Deploy') {
+    steps {
+        sh '''
+        docker pull maheshsanju/orderapi:v1.0
+
+        docker stop mydotnetcontainer || true
+        docker rm mydotnetcontainer || true
+
+        docker run -d \
+          --name mydotnetcontainer \
+          -p 8085:8080 \
+          --restart unless-stopped \
+          maheshsanju/orderapi:v1.0
+        '''
+    }
+}
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
