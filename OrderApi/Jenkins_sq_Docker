@@ -172,6 +172,16 @@ pipeline {
                 '''
             }
         }
+        stage('Push to ACR') {
+    steps {
+        withDockerRegistry(
+            credentialsId: 'acr',
+            url: 'https://maheshacr0917.azurecr.io'
+        ) {
+            sh 'docker push maheshacr0917.azurecr.io/orderapi:v1.0'
+        }
+    }
+}
     }
 
     post {
