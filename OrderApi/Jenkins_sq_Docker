@@ -1,29 +1,117 @@
+/*
+=========================================================
+ CI/CD PIPELINE : .NET 8 + SonarQube + Docker + Jenkins
+ Repository : https://github.com/Maheshbabuduggi/OrderPlatform.git
+=========================================================
+
+#######################
+1. JENKINS CONFIGURATION
+#######################
+
+A. Manage Jenkins -> Credentials
+
+   ID : docker
+   Type : Username with Password
+   Purpose : Docker Hub authentication
+
+   ID : sonartoken
+   Type : Secret Text
+   Purpose : SonarQube User Token
+
+B. Manage Jenkins -> System
+
+   SonarQube Servers
+      Name : sonar
+      URL  : http://104.211.90.243:9000
+      Credential : sonartoken
+
+########################
+2. VM DEPENDENCIES
+########################
+
+Install on Ubuntu VM:
+
+# .NET 8 SDK
+sudo apt update
+sudo apt install -y dotnet-sdk-8.0
+
+# Docker
+sudo apt install docker.io -y
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
+
+# SonarScanner for .NET (MSBuild)
+sudo su - jenkins
+dotnet tool install --global dotnet-sonarscanner
+echo 'export PATH=$PATH:/var/lib/jenkins/.dotnet/tools' >> ~/.bashrc
+source ~/.bashrc
+
+Verify
+dotnet --version
+dotnet-sonarscanner --version
+
+##############################
+3. SONARSCANNER MSBUILD NOTES
+##############################
+
+Plugin Required:
+Manage Jenkins -> Plugins
+Install:
+  ✓ SonarQube Scanner
+
+Tool Configuration:
+Manage Jenkins -> Tools
+Configure:
+  SonarScanner for MSBuild
+
+This pipeline uses the global tool:
+dotnet-sonarscanner begin/end
+
+####################################
+4. APPLICATION DEPLOYMENT
+####################################
+
+Build -> SonarQube -> Docker Build
+-> Push Docker Hub -> Pull locally
+-> Run Container on Port 8085
+
+*/
+
 pipeline {
     agent any
 
     stages {
 
-        stage('Clone') {
+        stage('Clone Repository') {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/Maheshbabuduggi/OrderPlatform.git'
             }
         }
 
-        stage('SonarQube Build') {
+        stage('SonarQube Analysis & Build') {
             steps {
+                // Uses SonarQube Server Name configured in
+                // Manage Jenkins -> System -> SonarQube Servers
                 withSonarQubeEnv('sonar') {
+
                     dir('OrderApi') {
+
                         sh '''
                         export PATH=$PATH:/var/lib/jenkins/.dotnet/tools
 
+                        # Begin Sonar Analysis
                         dotnet-sonarscanner begin \
                           /k:"OrderPlatform" \
                           /d:sonar.token=$SONAR_AUTH_TOKEN
 
+                        # Restore NuGet Packages
                         dotnet restore
+
+                        # Build Project
                         dotnet build -c Release
 
+                        # Upload analysis to SonarQube
                         dotnet-sonarscanner end \
                           /d:sonar.token=$SONAR_AUTH_TOKEN
                         '''
@@ -32,11 +120,20 @@ pipeline {
             }
         }
 
-        stage('Build & Tag Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 dir('OrderApi') {
-                    withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
-                        sh 'docker build -t maheshsanju/orderapi:v1.0 .'
+
+                    // Docker Hub credentials ID = docker
+                    withDockerRegistry(
+                        credentialsId: 'docker',
+                        url: 'https://index.docker.io/v1/'
+                    ) {
+
+                        sh '''
+                        docker build \
+                          -t maheshsanju/orderapi:v1.0 .
+                        '''
                     }
                 }
             }
@@ -44,37 +141,51 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+
+                withDockerRegistry(
+                    credentialsId: 'docker',
+                    url: 'https://index.docker.io/v1/'
+                ) {
+
                     sh 'docker push maheshsanju/orderapi:v1.0'
                 }
             }
         }
 
-       
-        stage('Deploy') {
-    steps {
-        sh '''
-        docker pull maheshsanju/orderapi:v1.0
+        stage('Deploy Locally') {
+            steps {
 
-        docker stop mydotnetcontainer || true
-        docker rm mydotnetcontainer || true
+                sh '''
+                # Pull latest image from Docker Hub
+                docker pull maheshsanju/orderapi:v1.0
 
-        docker run -d \
-          --name mydotnetcontainer \
-          -p 8085:8080 \
-          --restart unless-stopped \
-          maheshsanju/orderapi:v1.0
-        '''
-    }
-}
+                # Remove old container if exists
+                docker stop mydotnetcontainer || true
+                docker rm mydotnetcontainer || true
+
+                # Run new container
+                docker run -d \
+                  --name mydotnetcontainer \
+                  -p 8085:8080 \
+                  --restart unless-stopped \
+                  maheshsanju/orderapi:v1.0
+                '''
+            }
+        }
     }
 
     post {
+
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'SUCCESS : CI/CD Pipeline Completed'
         }
+
         failure {
-            echo 'Pipeline failed!'
+            echo 'FAILED : Check Jenkins Console Logs'
+        }
+
+        always {
+            echo 'Pipeline Execution Finished'
         }
     }
 }
